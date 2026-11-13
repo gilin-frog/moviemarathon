@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>몰아보기 플래너</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 제목 → 예매 사이트 바로가기 → 날짜 탭 + 상영관별 시간표 → 영화 입력 · 영화별 목록 */
+:root{
+  --bg:#f1f2f6; --surface:#ffffff; --ink:#18202c; --muted:#5b6475; --line:#d8dce5; --soft:#e8eaf1;
+  --accent:#3a45b5; --accent-ink:#ffffff; --bad:#c0354a;
+  --font-display:"Black Han Sans","IBM Plex Sans KR",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11141a; --surface:#1a1f28; --ink:#e7eaf0; --muted:#9aa3b3; --line:#2d3440; --soft:#222834;
+  --accent:#8e99ff; --accent-ink:#11141a; --bad:#ef6b7e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11141a; --surface:#1a1f28; --ink:#e7eaf0; --muted:#9aa3b3; --line:#2d3440; --soft:#222834;
+  --accent:#8e99ff; --accent-ink:#11141a; --bad:#ef6b7e; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--font-display);font-weight:400;font-size:clamp(28px,5vw,40px);letter-spacing:.01em;margin:0;line-height:1.1}
+h2{font-size:16px;font-weight:700;margin:0}
+.sub{color:var(--muted);margin:6px 0 0;max-width:64ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
+input,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0}
+textarea{width:100%;min-height:110px;font-family:var(--font-mono);font-size:12.5px}
+button,.btn{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 12px;font-weight:500;text-decoration:none;display:inline-block}
+button:hover,.btn:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,.btn:focus-visible,.blk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+
+.links{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.links .lbl{font-size:12px;color:var(--muted);font-weight:500;margin-right:4px}
+
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{display:flex;flex-direction:column;align-items:flex-start;padding:8px 14px;line-height:1.3}
+.tab .d{font-weight:700}
+.tab .n{font-size:12px;color:var(--muted)}
+.tab[aria-selected=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tab[aria-selected=true] .n{color:var(--bg);opacity:.75}
+
+.tt-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.tt{display:grid;position:relative;min-width:max-content}
+.tt-head{position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--line);font-weight:600;font-size:13px;padding:8px 10px;white-space:nowrap}
+.tt-col{position:relative;border-left:1px solid var(--line)}
+.tt-time{position:relative}
+.tick{position:absolute;left:0;right:0;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.tick span{position:absolute;top:-8px;left:6px;background:var(--bg);padding:0 3px}
+.hline{position:absolute;left:0;right:0;border-top:1px dashed var(--line);pointer-events:none}
+.blk{position:absolute;left:5px;right:5px;border-radius:6px;padding:5px 7px;font-size:12px;line-height:1.3;overflow:hidden;cursor:pointer;
+  border:1.5px solid var(--accent);background:var(--surface);color:var(--ink);display:flex;flex-direction:column;gap:1px;text-align:left}
+.blk:hover{background:var(--soft)}
+.blk .t{font-weight:700;font-size:12.5px}
+.blk .m{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.empty{padding:28px;color:var(--muted);text-align:center}
+
+.slots{display:flex;flex-direction:column;gap:8px}
+.slot{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,1.5fr) auto;gap:8px;align-items:end;padding:10px;border:1px dashed var(--line);border-radius:8px}
+.slot input{width:100%}
+@media (max-width:560px){.slot{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.slot .f:nth-child(3){grid-column:1/-1}}
+.films{list-style:none;margin:10px 0 0;padding:0}
+.film{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;padding:8px 0;border-top:1px solid var(--line);align-items:center}
+.film:first-child{border-top:0}
+.film .nm{font-weight:600;min-width:0}
+.film .nm small{color:var(--muted);font-weight:400;margin-left:6px}
+.film .acts{display:flex;gap:6px}
+.film .acts button,.film .acts a{padding:3px 9px;font-size:12px}
+details summary{cursor:pointer;font-weight:600}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;z-index:20}
+@media (prefers-reduced-motion:no-preference){.blk{transition:background .15s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>몰아보기 플래너</h1>
+    <p class="sub">영화마다 상영관과 상영 시간을 입력하면 상영관별 시간표로 모아 보여줍니다. 시간표의 상영 칸을 누르면 그 영화를 바로 고칠 수 있습니다.</p>
+  </header>
+
+  <section class="panel" aria-label="예매 사이트">
+    <div class="links">
+      <span class="lbl">예매 사이트</span>
+      <a class="btn" href="https://www.cgv.co.kr/" target="_blank" rel="noopener">CGV</a>
+      <a class="btn" href="https://www.lottecinema.co.kr/" target="_blank" rel="noopener">롯데시네마</a>
+      <a class="btn" href="https://www.megabox.co.kr/" target="_blank" rel="noopener">메가박스</a>
+      <a class="btn" href="https://www.dtryx.com/" target="_blank" rel="noopener">디트릭스</a>
+      <a class="btn" href="https://www.koreafilm.or.kr/" target="_blank" rel="noopener">한국영상자료원</a>
+      <a class="btn" href="https://www.cinematheque.seoul.kr/" target="_blank" rel="noopener">서울아트시네마</a>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="상영 시간표">
+    <h2>상영 시간표</h2>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div class="tt-scroll"><div id="tt"></div></div>
+  </section>
+
+  <section class="panel" aria-label="영화 입력">
+    <h2 id="formTitle">영화 입력</h2>
+    <form id="filmForm" style="display:flex;flex-direction:column;gap:10px">
+      <div class="row">
+        <label class="f" for="fTitle" style="flex:1 1 220px">제목<input id="fTitle" list="titleList" required></label>
+        <label class="f" for="fLink" style="flex:1 1 220px">예매 링크 (선택)<input id="fLink" type="url" placeholder="https://"></label>
+      </div>
+      <div class="slots" id="slots"></div>
+      <div class="row" style="gap:8px;align-items:center">
+        <button type="button" id="addSlot">+ 날짜·상영관 줄 추가</button>
+        <span style="flex:1"></span>
+        <button type="button" id="cancelEdit" hidden>수정 취소</button>
+        <button class="primary" type="submit" id="submitBtn">영화 추가</button>
+      </div>
+      <p class="hint">회차는 <b>시작-끝</b>으로 적고, 같은 날 같은 상영관이면 쉼표로 이어 씁니다. 예: <span style="font-family:var(--font-mono)">10:30-12:20, 13:40-15:35</span>. 날짜나 상영관이 다르면 줄을 추가하세요.</p>
+      <datalist id="titleList"></datalist><datalist id="venueList"></datalist>
+    </form>
+
+    <details>
+      <summary id="listSummary">영화별 목록</summary>
+      <ul class="films" id="list"></ul>
+      <div class="row" style="margin-top:10px">
+        <button id="clearAll" type="button">전체 비우기</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>시간표 한꺼번에 붙여넣기 · 옮기기</summary>
+      <p class="hint" style="margin-top:8px">엑셀·구글 시트에서 <b>날짜, 시작, 끝, 제목, 극장, 예매 링크(선택)</b> 순서의 열을 복사해 붙여넣으세요. 날짜는 2026-11-21, 11/21, 11.21 모두 됩니다.</p>
+      <textarea id="importText" placeholder="2026-11-21	10:30	12:21	하녀	서울아트시네마"></textarea>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button id="importAdd" type="button" class="primary">목록에 더하기</button>
+        <button id="importReplace" type="button">목록을 이걸로 바꾸기</button>
+        <button id="exportAll" type="button">전체 목록을 같은 형식으로 복사</button>
+      </div>
+    </details>
+    <p class="hint">입력한 내용은 이 브라우저에만 저장됩니다. 다른 기기로 옮길 때는 ‘전체 목록을 같은 형식으로 복사’ 후 그 기기에서 붙여넣으세요.</p>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const DOW = ['일','월','화','수','목','금','토'];
+const KEY = 'marathon-planner-v3';
+const PX = 1.15;
+
+/* 예시 데이터: 가상의 고전 특별전 시간표 */
+const SAMPLE = [
+  ['2026-11-21','10:30','12:21','하녀','서울아트시네마'],
+  ['2026-11-21','11:00','12:47','오발탄','KOFA 1관'],
+  ['2026-11-21','13:00','14:38','화녀','KOFA 2관'],
+  ['2026-11-21','13:40','15:25','바보들의 행진','서울아트시네마'],
+  ['2026-11-21','15:30','17:15','길소뜸','KOFA 1관'],
+  ['2026-11-21','16:10','18:11','꼬방동네 사람들','서울아트시네마'],
+  ['2026-11-21','17:00','18:53','바람 불어 좋은 날','KOFA 2관'],
+  ['2026-11-22','10:00','11:45','길소뜸','서울아트시네마'],
+  ['2026-11-22','11:00','12:52','서편제','KOFA 1관'],
+  ['2026-11-22','12:20','14:11','하녀','KOFA 2관'],
+  ['2026-11-22','14:00','15:53','바람 불어 좋은 날','서울아트시네마']
+];
+
+let uid = 1;
+const mk = (date,start,end,title,venue,link='') => ({id:'s'+(uid++), date, start, end, title:String(title).trim(), venue:String(venue).trim(), link:String(link||'').trim()});
+const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+const fmt = m => { m = ((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){ const s = JSON.parse(raw); if(s && Array.isArray(s.screenings)){ bump(s.screenings); return s; } }
+    /* 이전 버전(러닝타임 방식) 데이터 옮겨오기 */
+    const old = JSON.parse(localStorage.getItem('marathon-planner-v2') || 'null');
+    if(old && Array.isArray(old.screenings) && !old.isSample){
+      const ads = +(old.settings && old.settings.adsMin) || 0;
+      const screenings = old.screenings.map(x=>({id:x.id, date:x.date, start:x.start, end:fmt(toMin(x.start)+ads+(+x.runtime||0)), title:x.title, venue:x.venue, link:x.link||''}));
+      bump(screenings); return {screenings, day:null, isSample:false};
+    }
+  }catch(e){}
+  return {screenings:SAMPLE.map(r=>mk(...r)), day:null, isSample:true};
+}
+function bump(list){ list.forEach(x=>{ const n = +String(x.id).slice(1); if(n>=uid) uid = n+1; }); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+let state = load();
+
+const dayLabel = d => { const [y,mo,da] = d.split('-').map(Number); return `${mo}/${da} (${DOW[new Date(y,mo-1,da).getDay()]})`; };
+/* 끝 시간이 시작보다 이르면 자정을 넘긴 상영으로 봅니다 */
+const endMin = s => { const a = toMin(s.start), e = toMin(s.end); return e > a ? e : e + 1440; };
+const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u||'') ? u : '';
+const byTime = (x,y) => x.date.localeCompare(y.date) || toMin(x.start)-toMin(y.start);
+const F = id => document.getElementById(id);
+
+function renderTabs(){
+  const ds = [...new Set(state.screenings.map(s=>s.date))].sort();
+  if(!ds.includes(state.day)) state.day = ds[0] || null;
+  F('tabs').innerHTML = ds.map(d=>{
+    const all = state.screenings.filter(s=>s.date===d);
+    return `<button type="button" class="tab" role="tab" data-day="${d}" aria-selected="${d===state.day}">
+      <span class="d">${dayLabel(d)}</span><span class="n">상영 ${all.length}회 · ${new Set(all.map(s=>s.title)).size}편</span></button>`;
+  }).join('');
+}
+
+function renderTT(){
+  const host = F('tt');
+  const list = state.screenings.filter(s=>s.date===state.day);
+  if(!list.length){ host.className=''; host.removeAttribute('style'); host.innerHTML = `<div class="empty">상영 정보가 없습니다. 아래 ‘영화 입력’에서 넣어 주세요.</div>`; return; }
+  const venues = [...new Set(list.map(s=>s.venue))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const t0 = Math.floor(Math.min(...list.map(s=>toMin(s.start)))/60)*60;
+  const t1 = Math.ceil(Math.max(...list.map(endMin))/60)*60;
+  const H = (t1-t0)*PX;
+  let lines = '', ticks = '';
+  for(let t=t0;t<=t1;t+=60){ lines += `<div class="hline" style="top:${(t-t0)*PX}px"></div>`; ticks += `<div class="tick" style="top:${(t-t0)*PX}px"><span>${fmt(t)}</span></div>`; }
+  host.className = 'tt';
+  host.style.gridTemplateColumns = `56px repeat(${venues.length}, minmax(150px,1fr))`;
+  let html = `<div class="tt-head"></div>` + venues.map(v=>`<div class="tt-head">${esc(v)}</div>`).join('');
+  html += `<div class="tt-time" style="height:${H+12}px">${ticks}</div>`;
+  for(const v of venues){
+    html += `<div class="tt-col" style="height:${H+12}px">${lines}`;
+    for(const s of list.filter(x=>x.venue===v)){
+      const a = toMin(s.start), e = endMin(s);
+      html += `<button type="button" class="blk" data-film="${esc(s.title)}" style="top:${(a-t0)*PX}px;height:${Math.max((e-a)*PX-2,30)}px"
+        aria-label="${esc(s.title)} ${s.start}부터 ${s.end}까지, ${esc(v)}. 눌러서 수정">
+        <span class="m">${s.start}–${s.end}</span><span class="t">${esc(s.title)}</span><span class="m">${e-a}분</span></button>`;
+    }
+    html += `</div>`;
+  }
+  host.innerHTML = html;
+}
+
+function renderList(){
+  const arr = [...state.screenings].sort(byTime), g = new Map();
+  arr.forEach(s=>{ if(!g.has(s.title)) g.set(s.title,[]); g.get(s.title).push(s); });
+  const titles = [...g.keys()].sort((a,b)=>a.localeCompare(b,'ko'));
+  F('listSummary').textContent = `영화별 목록 (${titles.length}편 · ${arr.length}회)`;
+  F('list').innerHTML = titles.length ? titles.map(t=>{
+    const f = g.get(t), vs = [...new Set(f.map(s=>s.venue))], url = safeUrl((f.find(s=>s.link)||{}).link);
+    return `<li class="film"><div class="nm">${esc(t)}<small>${f.length}회 · ${esc(vs.slice(0,2).join(', '))}${vs.length>2?` 외 ${vs.length-2}곳`:''}</small></div>
+      <div class="acts">${url?`<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">예매</a>`:''}<button type="button" data-film="${esc(t)}">수정</button><button type="button" data-delfilm="${esc(t)}">삭제</button></div></li>`;
+  }).join('') : `<li class="hint">입력한 영화가 없습니다.</li>`;
+  F('titleList').innerHTML = titles.map(t=>`<option value="${esc(t)}">`).join('');
+  F('venueList').innerHTML = [...new Set(arr.map(s=>s.venue))].map(t=>`<option value="${esc(t)}">`).join('');
+}
+
+function render(){ renderTabs(); renderTT(); renderList(); save(); }
+function toast(msg){ const t = F('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(()=>t.hidden=true, 2400); }
+
+/* 시간 읽기: 10:30, 10.30, 10시30 */
+function parseTime(raw){ const m = String(raw).trim().match(/^(\d{1,2})[:시.]\s*(\d{2})분?$/); return m && +m[1] < 30 && +m[2] < 60 ? `${m[1].padStart(2,'0')}:${m[2]}` : null; }
+function parseRange(raw){
+  const p = String(raw).split(/\s*[-~–]\s*/);
+  if(p.length !== 2) return null;
+  const a = parseTime(p[0]), b = parseTime(p[1]);
+  return a && b && a !== b ? {start:a, end:b} : null;
+}
+function parseDate(raw){
+  raw = String(raw).trim().replace(/\s*\(.*\)$/,'');
+  let m = raw.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m = raw.match(/^(\d{1,2})[-./월\s]+(\d{1,2})일?$/);
+  if(m) return `${new Date().getFullYear()}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  return null;
+}
+
+/* 영화 입력: 제목 한 번 + 날짜·상영관·회차(시작-끝, 여러 개) 줄 */
+let editing = null, slotN = 0;
+function addSlot(v = {}){
+  const n = ++slotN, div = document.createElement('div');
+  div.className = 'slot';
+  div.innerHTML = `<label class="f" for="sd${n}">날짜<input id="sd${n}" type="date" value="${esc(v.date||state.day||'')}" required></label>
+    <label class="f" for="sv${n}">극장·상영관<input id="sv${n}" list="venueList" value="${esc(v.venue||'')}" placeholder="CGV 용산 IMAX" required></label>
+    <label class="f" for="st${n}">회차 (시작-끝, 쉼표로 여러 개)<input id="st${n}" value="${esc(v.times||'')}" placeholder="10:30-12:20, 13:40-15:35" required></label>
+    <button type="button" data-rmslot aria-label="이 줄 지우기">지우기</button>`;
+  F('slots').appendChild(div);
+}
+function resetSlots(list){ F('slots').innerHTML = ''; (list && list.length ? list : [{}]).forEach(addSlot); }
+F('addSlot').addEventListener('click', ()=>{
+  const rows = F('slots').querySelectorAll('.slot'), last = rows[rows.length-1];
+  addSlot({date: last ? last.querySelector('input[type=date]').value : ''});
+});
+F('slots').addEventListener('click', e=>{
+  const b = e.target.closest('[data-rmslot]'); if(!b) return;
+  if(F('slots').children.length > 1) b.closest('.slot').remove(); else resetSlots();
+});
+
+function startEdit(title){
+  const arr = state.screenings.filter(s=>s.title===title).sort(byTime); if(!arr.length) return;
+  editing = title;
+  F('fTitle').value = title; F('fLink').value = (arr.find(s=>s.link)||{}).link || '';
+  const g = new Map();
+  arr.forEach(s=>{ const k = s.date+'|'+s.venue; if(!g.has(k)) g.set(k,{date:s.date, venue:s.venue, times:[]}); g.get(k).times.push(`${s.start}-${s.end}`); });
+  resetSlots([...g.values()].map(x=>({...x, times:x.times.join(', ')})));
+  F('formTitle').textContent = `영화 수정 · ${title}`; F('submitBtn').textContent = '저장'; F('cancelEdit').hidden = false;
+  F('filmForm').scrollIntoView({block:'center'}); F('fTitle').focus();
+}
+function stopEdit(){
+  editing = null; F('filmForm').reset(); resetSlots();
+  F('formTitle').textContent = '영화 입력'; F('submitBtn').textContent = '영화 추가'; F('cancelEdit').hidden = true;
+}
+F('cancelEdit').addEventListener('click', stopEdit);
+
+F('filmForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const title = F('fTitle').value.trim(), link = F('fLink').value.trim();
+  if(!title) return;
+  const items = [], bad = new Set();
+  F('slots').querySelectorAll('.slot').forEach((row,i)=>{
+    const [d,v,t] = row.querySelectorAll('input');
+    const date = d.value, venue = v.value.trim(), ranges = t.value.split(/\s*[,/]\s*/).filter(Boolean);
+    if(!date || !venue || !ranges.length){ bad.add(i+1); return; }
+    ranges.forEach(x=>{ const r = parseRange(x); r ? items.push({date, venue, ...r}) : bad.add(i+1); });
+  });
+  if(bad.size || !items.length){ toast(`${[...bad].join(', ')||1}번째 줄을 확인해 주세요. 회차는 10:30-12:20처럼 씁니다`); return; }
+  state.isSample = false;
+  if(editing) state.screenings = state.screenings.filter(s=>s.title!==editing);
+  const key = s => s.date+'|'+s.venue+'|'+s.start;
+  const have = new Set(state.screenings.filter(s=>s.title===title).map(key));
+  let added = 0;
+  items.forEach(it=>{ if(have.has(key(it))) return; have.add(key(it)); state.screenings.push(mk(it.date, it.start, it.end, title, it.venue, link)); added++; });
+  if(link) state.screenings.forEach(s=>{ if(s.title===title) s.link = link; });
+  toast(editing ? `${title} 저장 완료` : `${title} ${added}회 상영을 추가했습니다`);
+  state.day = items[0].date; stopEdit(); render();
+});
+
+/* 탭 · 시간표 칸 · 목록 버튼 */
+document.addEventListener('click', e=>{
+  const tab = e.target.closest('[data-day]');
+  if(tab){ state.day = tab.dataset.day; render(); return; }
+  const ed = e.target.closest('[data-film]');
+  if(ed){ startEdit(ed.dataset.film); return; }
+  const del = e.target.closest('[data-delfilm]');
+  if(del){
+    if(!del.dataset.armed){ del.dataset.armed = '1'; del.textContent = '한 번 더 누르면 삭제';
+      setTimeout(()=>{ if(del.isConnected){ delete del.dataset.armed; del.textContent = '삭제'; } }, 3000); return; }
+    const t = del.dataset.delfilm; state.isSample = false;
+    state.screenings = state.screenings.filter(s=>s.title!==t);
+    if(editing===t) stopEdit(); render(); toast(`${t} 상영을 모두 지웠습니다`);
+  }
+});
+
+/* 붙여넣기: 날짜, 시작, 끝, 제목, 극장, 링크 */
+function doImport(replace){
+  const lines = F('importText').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const out = [], bad = [];
+  lines.forEach((l,i)=>{
+    const p = l.split(/\t|,/).map(x=>x.trim().replace(/^"|"$/g,''));
+    const d = parseDate(p[0]||''), a = parseTime(p[1]||''), b = parseTime(p[2]||'');
+    if(p.length<5 || !d || !a || !b || !p[3] || !p[4]){ if(!(i===0 && /날짜|date/i.test(p[0]||''))) bad.push(i+1); return; }
+    out.push(mk(d,a,b,p[3],p[4],p.slice(5).join(',')));
+  });
+  if(!out.length){ toast('읽을 수 있는 줄이 없습니다. 날짜, 시작, 끝, 제목, 극장 순서인지 확인해 주세요'); return; }
+  if(replace) state.screenings = [];
+  state.isSample = false; state.screenings.push(...out); state.day = out[0].date; F('importText').value = '';
+  render(); toast(`${out.length}회 상영을 넣었습니다${bad.length?` · ${bad.join(', ')}번째 줄은 건너뜀`:''}`);
+}
+F('importAdd').addEventListener('click', ()=>doImport(false));
+F('importReplace').addEventListener('click', ()=>doImport(true));
+
+F('exportAll').addEventListener('click', ()=>{
+  if(!state.screenings.length){ toast('복사할 상영이 없습니다'); return; }
+  const txt = [...state.screenings].sort(byTime).map(s=>[s.date,s.start,s.end,s.title,s.venue,s.link||''].join('\t')).join('\n');
+  const fallback = ()=>{ F('importText').closest('details').open = true; F('importText').value = txt; F('importText').select(); toast('복사가 막혀 있어 붙여넣기 칸에 넣어 두었습니다'); };
+  try{ navigator.clipboard.writeText(txt).then(()=>toast('전체 목록을 복사했습니다. 구글 시트에 바로 붙여넣을 수 있습니다'), fallback); }catch(err){ fallback(); }
+});
+
+let armed = false;
+F('clearAll').addEventListener('click', e=>{
+  if(!armed){ armed = true; e.target.textContent = '한 번 더 누르면 모두 지워집니다'; setTimeout(()=>{armed=false; e.target.textContent='전체 비우기';}, 3000); return; }
+  armed = false; e.target.textContent = '전체 비우기';
+  state.screenings = []; state.isSample = false; stopEdit(); render(); toast('상영 목록을 비웠습니다');
+});
+
+resetSlots();
+render();
+</script>
+
+</body>
+</html>
